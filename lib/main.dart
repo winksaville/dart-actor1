@@ -40,47 +40,53 @@ Future<Client> startClient() async {
 }
 
 abstract class Client {
-  SendPort partnerPort;
-  ReceivePort receivePort;
-  Isolate isolate;
+  SendPort _partnerPort;
+  ReceivePort _receivePort;
+  Isolate _isolate;
 
   Client(SendPort partnerPort) {
-    this.partnerPort = partnerPort;
+    _partnerPort = partnerPort;
   }
 
+  /// Start the client
   void start() async {
-    this.isolate = await Isolate.spawn(Client.entryPoint, this);
+    _isolate = await Isolate.spawn(Client._entryPoint, this);
   }
 
   /// Stop the isolate immediately and return null
   void stop() {
     // Handle isolate being null
-    this.isolate?.kill(priority: Isolate.immediate);
+    _isolate?.kill(priority: Isolate.immediate);
   }
 
-  void enter() {
+  /// Called when Client is first invoked and usually
+  /// Sets up communication with the partner
+  void _enter() {
     // Create a port that will receive messages from our partner
-    this.receivePort = ReceivePort();
+    _receivePort = ReceivePort();
 
     // Using the partnerPort send our sendPort so they
     // can send us messages.
-    this.partnerPort.send(receivePort.sendPort);
+    _partnerPort.send(_receivePort.sendPort);
   }
 
-  // Client receives a Send port from our partner
-  // so that messages maybe sent to it.
-  static void entryPoint(Client client) {
-    client.enter();
-    client.begin();
-    client.receivePort.listen(client.process);
+  /// Invoked by start and is the enty point for the client
+  /// and is the invoked when the isolate starts
+  /// so that messages maybe sent to it.
+  static void _entryPoint(Client client) {
+    client._enter();
+    client._begin();
+    client._receivePort.listen(client._process);
     stdout.writeln('client: running');
   }
 
-  // Invoked once when the client is first started
-  void begin() {}
+  /// Invoked once when the client is first started
+  /// and before the first call to process
+  void _begin() {}
 
-  // Invoked when a message arrives and must be overridden
-  void process(message);
+  /// Invoked everytime a message arrives from the partner
+  /// and must be overridden
+  void _process(message);
 }
 
 class MyClient extends Client {
@@ -89,17 +95,17 @@ class MyClient extends Client {
   MyClient(SendPort partnerPort) : super(partnerPort);
 
   @override
-  void begin() {
-    this.counter = 1;
-    this.partnerPort.send(counter);
+  void _begin() {
+    counter = 1;
+    _partnerPort.send(counter);
   }
 
   @override
-  void process(dynamic message) {
+  void _process(dynamic message) {
       //stdout.writeln('RESP: ' + data);
-      this.counter++;
+      counter++;
       //stdout.writeln('SEND: ' + counter);
-      this.partnerPort.send(counter);
+      _partnerPort.send(counter);
   }
 }
 
