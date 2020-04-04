@@ -1,19 +1,18 @@
-// Based on [this](https://codingwithjoe.com/dart-fundamentals-isolates/) from
-// [Coding With Joe](codingwithjost.com).
+// Based on [this](https://github.com/winksaville/dart-isolate-example)
 
 import 'dart:io';
 import 'dart:async';
 import 'dart:isolate';
 import 'package:intl/intl.dart';
 
-// These Globals are separate instances in each isolate.
-SendPort responsePort = null;
+// Counter for message received by server
 int msgCounter = 0;
 
 // Start an isolate and return it
 Future<Client> startClient() async {
   // Create a port used to communite with the isolate
   ReceivePort receivePort = ReceivePort();
+  SendPort responsePort = null;
 
   // Create client
   Client client = MyClient(receivePort.sendPort, 1234);
