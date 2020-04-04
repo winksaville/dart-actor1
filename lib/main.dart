@@ -15,8 +15,7 @@ Future<Client> startClient() async {
   SendPort responsePort = null;
 
   // Create client
-  Client client = MyClient(receivePort.sendPort, 1234);
-  stdout.writeln('main: start client.integer=${client.integer}');
+  Client client = MyClient(receivePort.sendPort);
 
   // Start the client
   await client.start();
@@ -44,11 +43,9 @@ abstract class Client {
   SendPort partnerPort;
   ReceivePort receivePort;
   Isolate isolate;
-  int integer;
 
-  Client(SendPort partnerPort, int i) {
+  Client(SendPort partnerPort) {
     this.partnerPort = partnerPort;
-    this.integer = i;
   }
 
   void start() async {
@@ -64,11 +61,6 @@ abstract class Client {
   void enter() {
     // Create a port that will receive messages from our partner
     this.receivePort = ReceivePort();
-
-    // Modify integer
-    stdout.writeln('client: integer=${this.integer}');
-    this.integer = 456;
-    stdout.writeln('client: integer=${this.integer}');
 
     // Using the partnerPort send our sendPort so they
     // can send us messages.
@@ -94,7 +86,7 @@ abstract class Client {
 class MyClient extends Client {
   int counter;
 
-  MyClient(SendPort partnerPort, int i) : super(partnerPort, i);
+  MyClient(SendPort partnerPort) : super(partnerPort);
 
   @override
   void begin() {
@@ -146,11 +138,6 @@ void main() async {
   stdout.writeln('stopping');
   client.stop();
   stdout.writeln('stopped');
-
-  // The main has a different instance of client then the
-  // one in the Isolate.
-  stdout.writeln('main: exiting client.integer=${client.integer}');
-  assert(client.integer == 1234);
 
   // Because main is async use exit
   exit(0);
