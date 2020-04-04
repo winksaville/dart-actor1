@@ -9,15 +9,19 @@ import 'package:intl/intl.dart';
 // These Globals are separate instances in each isolate.
 SendPort responsePort = null;
 int msgCounter = 0;
+Client client = null;
 
 // Start an isolate and return it
 Future<Isolate> start() async {
   // Create a port used to communite with the isolate
   ReceivePort receivePort = ReceivePort();
 
+  client = Client(receivePort.sendPort, 1234);
+  stdout.writeln('main: start client.integer=${client.integer}');
+
   // Spawn client in an isolate passing the sendPort so
   // it can send us messages
-  Isolate isolate = await Isolate.spawn(entryPoint, receivePort.sendPort);
+  Isolate isolate = await Isolate.spawn(Client.entryPoint, client);
 
   // Listen on the receive port passing a routine that accepts
   // the data and prints it.
@@ -37,29 +41,43 @@ Future<Isolate> start() async {
   return isolate;
 }
 
-/// Client receives a Send port from our partner
-/// so that messages maybe sent to it.
-void entryPoint(SendPort partnerPort) {
-  // Create a port that will receive messages from our partner
-  ReceivePort receivePort = ReceivePort();
+class Client {
+  SendPort partnerPort;
+  int integer;
 
-  // Using the partnerPort send our sendPort so they
-  // can send us messages.
-  partnerPort.send(receivePort.sendPort);
+  Client(SendPort partnerPort, int i) {
+    this.partnerPort = partnerPort;
+    this.integer = i;
+  }
 
-  // Since we're the client we send the first data message
-  int counter = 1;
-  partnerPort.send(counter);
+  /// Client receives a Send port from our partner
+  /// so that messages maybe sent to it.
+  static void entryPoint(Client client) {
+    stdout.writeln('client: 1 integer=${client.integer}');
+    client.integer = 456;
+    stdout.writeln('client: 2 integer=${client.integer}');
 
-  // Wait for response and send more messages as fast as we can
-  receivePort.listen((data) {
-    //stdout.writeln('RESP: ' + data);
-    counter++;
-    //stdout.writeln('SEND: ' + counter);
-    partnerPort.send(counter);
-  });
+    // Create a port that will receive messages from our partner
+    ReceivePort receivePort = ReceivePort();
 
-  stdout.writeln('client: done');
+    // Using the partnerPort send our sendPort so they
+    // can send us messages.
+    client.partnerPort.send(receivePort.sendPort);
+
+    // Since we're the client we send the first data message
+    int counter = 1;
+    client.partnerPort.send(counter);
+
+    // Wait for response and send more messages as fast as we can
+    receivePort.listen((data) {
+      //stdout.writeln('RESP: ' + data);
+      counter++;
+      //stdout.writeln('SEND: ' + counter);
+      client.partnerPort.send(counter);
+    });
+
+    stdout.writeln('client: done');
+  }
 }
 
 /// Stop the isolate immediately and return null
@@ -105,6 +123,11 @@ void main() async {
   stop(null);
   isolate = stop(isolate); // return null
   stdout.writeln('stopped');
+
+  // The main has a different instance of client then the
+  // one in the Isolate.
+  stdout.writeln('main: exiting client.integer=${client.integer}');
+  assert(client.integer == 1234);
 
   // Because main is async use exit
   exit(0);
