@@ -9,22 +9,23 @@ import 'package:intl/intl.dart';
 // These Globals are separate instances in each isolate.
 SendPort responsePort = null;
 int msgCounter = 0;
-Client client = null;
 
 // Start an isolate and return it
-Future<Isolate> start() async {
+Future<Client> startClient() async {
   // Create a port used to communite with the isolate
   ReceivePort receivePort = ReceivePort();
 
-  client = Client(receivePort.sendPort, 1234);
+  // Create client
+  Client client = Client(receivePort.sendPort, 1234);
   stdout.writeln('main: start client.integer=${client.integer}');
 
-  // Spawn client in an isolate passing the sendPort so
-  // it can send us messages
-  Isolate isolate = await Isolate.spawn(Client.entryPoint, client);
+  // Start the client
+  await client.start();
 
-  // Listen on the receive port passing a routine that accepts
-  // the data and prints it.
+  // Listen on the receive port passing a routine that
+  // will process the data passed. The first message
+  // should be the send port for the client so this code
+  // can send message back.
   receivePort.listen((dynamic data) {
     if (data is SendPort) {
       stdout.writeln('RECEIVE: responsePort');
@@ -32,22 +33,32 @@ Future<Isolate> start() async {
     } else {
       assert(responsePort != null);
       msgCounter += 1;
-      responsePort.send(data); //'RESPONSE: ' + data);
-      //stdout.writeln('RECEIVE: ' + data);
+      responsePort.send(data);
     }
   });
 
-  // Return the isolate that was created
-  return isolate;
+  // Return the client that was created
+  return client;
 }
 
 class Client {
   SendPort partnerPort;
+  Isolate isolate;
   int integer;
 
   Client(SendPort partnerPort, int i) {
     this.partnerPort = partnerPort;
     this.integer = i;
+  }
+
+  void start() async {
+    this.isolate = await Isolate.spawn(Client.entryPoint, this);
+  }
+
+  /// Stop the isolate immediately and return null
+  void stop() {
+    // Handle isolate being null
+    this.isolate?.kill(priority: Isolate.immediate);
   }
 
   /// Client receives a Send port from our partner
@@ -80,13 +91,6 @@ class Client {
   }
 }
 
-/// Stop the isolate immediately and return null
-Isolate stop(Isolate isolate) {
-  // Handle isolate being null
-  isolate?.kill(priority: Isolate.immediate);
-  return null;
-}
-
 void main() async {
   // Change stdin so it doesn't echo input and doesn't wait for enter key
   stdin.echoMode = false;
@@ -100,7 +104,7 @@ void main() async {
 
   // Start an isolate
   int beforeStart = stopwatch.elapsedMicroseconds;
-  Isolate isolate = await start();
+  Client client = await startClient();
 
   // Wait for any key
   int afterStart = stopwatch.elapsedMicroseconds;
@@ -120,8 +124,7 @@ void main() async {
 
   // Stop the isolate, we also verify a null "works"
   stdout.writeln('stopping');
-  stop(null);
-  isolate = stop(isolate); // return null
+  client.stop();
   stdout.writeln('stopped');
 
   // The main has a different instance of client then the
