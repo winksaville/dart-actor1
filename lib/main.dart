@@ -16,7 +16,7 @@ Future<Client> startClient() async {
   ReceivePort receivePort = ReceivePort();
 
   // Create client
-  Client client = Client(receivePort.sendPort, 1234);
+  Client client = MyClient(receivePort.sendPort, 1234);
   stdout.writeln('main: start client.integer=${client.integer}');
 
   // Start the client
@@ -41,8 +41,9 @@ Future<Client> startClient() async {
   return client;
 }
 
-class Client {
+abstract class Client {
   SendPort partnerPort;
+  ReceivePort receivePort;
   Isolate isolate;
   int integer;
 
@@ -61,33 +62,53 @@ class Client {
     this.isolate?.kill(priority: Isolate.immediate);
   }
 
-  /// Client receives a Send port from our partner
-  /// so that messages maybe sent to it.
-  static void entryPoint(Client client) {
-    stdout.writeln('client: 1 integer=${client.integer}');
-    client.integer = 456;
-    stdout.writeln('client: 2 integer=${client.integer}');
-
+  void enter() {
     // Create a port that will receive messages from our partner
-    ReceivePort receivePort = ReceivePort();
+    this.receivePort = ReceivePort();
+
+    // Modify integer
+    stdout.writeln('client: integer=${this.integer}');
+    this.integer = 456;
+    stdout.writeln('client: integer=${this.integer}');
 
     // Using the partnerPort send our sendPort so they
     // can send us messages.
-    client.partnerPort.send(receivePort.sendPort);
+    this.partnerPort.send(receivePort.sendPort);
+  }
 
-    // Since we're the client we send the first data message
-    int counter = 1;
-    client.partnerPort.send(counter);
+  // Client receives a Send port from our partner
+  // so that messages maybe sent to it.
+  static void entryPoint(Client client) {
+    client.enter();
+    client.begin();
+    client.receivePort.listen(client.process);
+    stdout.writeln('client: running');
+  }
 
-    // Wait for response and send more messages as fast as we can
-    receivePort.listen((data) {
+  // Invoked once when the client is first started
+  void begin() {}
+
+  // Invoked when a message arrives and must be overridden
+  void process(message);
+}
+
+class MyClient extends Client {
+  int counter;
+
+  MyClient(SendPort partnerPort, int i) : super(partnerPort, i);
+
+  @override
+  void begin() {
+    this.counter = 1;
+    this.partnerPort.send(counter);
+  }
+
+  @override
+  void process(dynamic message) {
       //stdout.writeln('RESP: ' + data);
-      counter++;
+      this.counter++;
       //stdout.writeln('SEND: ' + counter);
-      client.partnerPort.send(counter);
-    });
-
-    stdout.writeln('client: done');
+      this.partnerPort.send(counter);
   }
 }
 
