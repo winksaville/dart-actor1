@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 int msgCounter = 0;
 
 // Start an isolate and return it
-Future<Client> startClient() async {
+Future<Client> startClient({bool locally=false}) async {
   // Create a port used to communite with the isolate
   ReceivePort receivePort = ReceivePort();
   SendPort responsePort = null;
@@ -18,7 +18,7 @@ Future<Client> startClient() async {
   Client client = MyClient(receivePort.sendPort);
 
   // Start the client
-  await client.start();
+  await client.start(locally: locally);
 
   // Listen on the receive port passing a routine that
   // will process the data passed. The first message
@@ -39,27 +39,49 @@ Future<Client> startClient() async {
   return client;
 }
 
+/// Client that can process messages and communicates
+/// via messages using a ReceivePort and SendPort.
 abstract class Client {
   SendPort _partnerPort;
   ReceivePort _receivePort;
   Isolate _isolate;
 
+  /// Contruct a client passing a SendPort which is used
+  /// by the client to send messages to the ReceivePort.
   Client(SendPort partnerPort) {
     _partnerPort = partnerPort;
   }
 
-  /// Start the client
-  void start() async {
-    _isolate = await Isolate.spawn(Client._entryPoint, this);
+  /// Start the client. When the client starts _enter will
+  /// be invoked and by default it creates _receivePort
+  /// and executes _partnerPort.send(_receivePort.sendPort)
+  /// which sends the SendPort to the partner.
+  void start({bool locally=false}) async {
+    if (locally) {
+      _isolate = Isolate.current;
+      _entryPoint(this);
+    } else {
+      _isolate = await Isolate.spawn(Client._entryPoint, this);
+    }
   }
 
-  /// Stop the isolate immediately and return null
+  /// Stop the client immediately if its not a local client.
   void stop() {
     // Handle isolate being null
-    _isolate?.kill(priority: Isolate.immediate);
+    if ((_isolate != null) && (_isolate != Isolate.current)) {
+      _isolate.kill(priority: Isolate.immediate);
+    }
   }
 
-  /// Called when Client is first invoked and usually
+  /// Invoked by when the clients starts.
+  static void _entryPoint(Client client) {
+    client._enter();
+    client._begin();
+    client._receivePort.listen(client._process);
+    stdout.writeln('client: running');
+  }
+
+  /// Called once when Client is first invoked and usually
   /// Sets up communication with the partner
   void _enter() {
     // Create a port that will receive messages from our partner
@@ -70,18 +92,8 @@ abstract class Client {
     _partnerPort.send(_receivePort.sendPort);
   }
 
-  /// Invoked by start and is the enty point for the client
-  /// and is the invoked when the isolate starts
-  /// so that messages maybe sent to it.
-  static void _entryPoint(Client client) {
-    client._enter();
-    client._begin();
-    client._receivePort.listen(client._process);
-    stdout.writeln('client: running');
-  }
-
-  /// Invoked once when the client is first started
-  /// and before the first call to process
+  /// Invoked once when the client is first started after
+  /// _enter and before the first call to _process.
   void _begin() {}
 
   /// Invoked everytime a message arrives from the partner
@@ -122,12 +134,17 @@ void main() async {
 
   // Start an isolate
   int beforeStart = stopwatch.elapsedMicroseconds;
-  Client client = await startClient();
+  Client client = await startClient(locally: true);
 
   // Wait for any key
   int afterStart = stopwatch.elapsedMicroseconds;
   await stdin.first;
   int done = stopwatch.elapsedMicroseconds;
+
+  // Stop the client
+  stdout.writeln('stopping');
+  client.stop();
+  stdout.writeln('stopped');
 
   // Print time
   msgCounter *= 2;
@@ -139,11 +156,6 @@ void main() async {
     'Total time=${f3digits.format(totalSecs)} secs '
     'msgs=${f0digit.format(msgCounter)} '
     'rate=${f0digit.format(rate)} msgs/sec');
-
-  // Stop the isolate, we also verify a null "works"
-  stdout.writeln('stopping');
-  client.stop();
-  stdout.writeln('stopped');
 
   // Because main is async use exit
   exit(0);
