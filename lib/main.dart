@@ -5,14 +5,20 @@ import 'dart:async';
 import 'dart:isolate';
 import 'package:intl/intl.dart';
 
-// Counter for message received by server
-int msgCounter = 0;
+class ResultSCS {
+  MyClient client;
+  MyServer server;
+  ResultSCS(this.client, this.server);
+}
 
-// Start an isolate and return it
-Future<Client> startClient({bool locally=false}) async {
+// Start a server and client
+Future<ResultSCS> startServerAndClient({bool locally=false}) async {
   // Create a port used to communite with the isolate
   ReceivePort receivePort = ReceivePort();
   SendPort responsePort = null;
+
+  // Create Server
+  Server server = MyServer(receivePort);
 
   // Create client
   Client client = MyClient(receivePort.sendPort);
@@ -20,23 +26,11 @@ Future<Client> startClient({bool locally=false}) async {
   // Start the client
   await client.start(locally: locally);
 
-  // Listen on the receive port passing a routine that
-  // will process the data passed. The first message
-  // should be the send port for the client so this code
-  // can send message back.
-  receivePort.listen((dynamic data) {
-    if (data is SendPort) {
-      stdout.writeln('RECEIVE: responsePort');
-      responsePort = data;
-    } else {
-      assert(responsePort != null);
-      msgCounter += 1;
-      responsePort.send(data);
-    }
-  });
+  // Start the server
+  await server.start(locally: locally);
 
-  // Return the client that was created
-  return client;
+  // Return the client and server
+  return ResultSCS(client, server);
 }
 
 /// Client that can process messages and communicates
@@ -61,7 +55,7 @@ abstract class Client {
       _isolate = Isolate.current;
       _entryPoint(this);
     } else {
-      _isolate = await Isolate.spawn(Client._entryPoint, this);
+      _isolate = await Isolate.spawn<Client>(Client._entryPoint, this);
     }
   }
 
@@ -102,7 +96,7 @@ abstract class Client {
 }
 
 class MyClient extends Client {
-  int counter;
+  int counter = 0;
 
   MyClient(SendPort partnerPort) : super(partnerPort);
 
@@ -121,6 +115,75 @@ class MyClient extends Client {
   }
 }
 
+/// Server
+abstract class Server {
+  SendPort _partnerPort;
+  ReceivePort _receivePort;
+  Isolate _isolate;
+
+  /// Contruct a server passing a ReceivePort which is used
+  /// by the server to receive messages from clients.
+  Server(ReceivePort receivePort) {
+    _receivePort = receivePort;
+  }
+
+  /// Start the server.
+  void start({bool locally=false}) async {
+    if (locally) {
+      _isolate = Isolate.current;
+      _entryPoint(this);
+    } else {
+      _isolate = await Isolate.spawn<Server>(Server._entryPoint, this);
+    }
+  }
+
+  /// Stop the server immediately if its not a local client.
+  void stop() {
+    // Handle isolate being null
+    if ((_isolate != null) && (_isolate != Isolate.current)) {
+      _isolate.kill(priority: Isolate.immediate);
+    }
+  }
+
+  /// Invoked by when the server starts.
+  static void _entryPoint(Server server) {
+    server._begin();
+    server._receivePort.listen(server.__process);
+    stdout.writeln('server: running');
+  }
+
+  /// Invoked once when the server and before the first call to _process.
+  void _begin() {}
+
+  /// Closed by for every message and handles receiving the _partnerPort
+  /// which is expected to be the first message.
+  void __process(dynamic message) {
+    if (message is SendPort) {
+      stdout.writeln('MyServer: got partnerPort');
+      _partnerPort = message;
+    } else {
+      assert(_partnerPort != null);
+      _process(message);
+    }
+  }
+
+  /// Invoked everytime a message arrives from the partner
+  /// and must be overridden
+  void _process(message);
+}
+
+class MyServer extends Server {
+  int counter = 0;
+
+  MyServer(ReceivePort receivePort) : super(receivePort);
+
+  @override
+  void _process(dynamic message) {
+    counter += 1;
+    _partnerPort.send(message);
+  }
+}
+
 void main() async {
   // Change stdin so it doesn't echo input and doesn't wait for enter key
   stdin.echoMode = false;
@@ -132,9 +195,10 @@ void main() async {
   // Tell the user to press a key
   stdout.writeln('Press any key to stop:');
 
-  // Start an isolate
   int beforeStart = stopwatch.elapsedMicroseconds;
-  Client client = await startClient(locally: true);
+
+  // Start client and server
+  ResultSCS result = await startServerAndClient(locally: true);
 
   // Wait for any key
   int afterStart = stopwatch.elapsedMicroseconds;
@@ -143,11 +207,12 @@ void main() async {
 
   // Stop the client
   stdout.writeln('stopping');
-  client.stop();
+  result.client.stop();
+  result.server.stop();
   stdout.writeln('stopped');
 
   // Print time
-  msgCounter *= 2;
+  int msgCounter = result.client.counter + result.server.counter;
   double totalSecs = (done.toDouble() - beforeStart.toDouble()) / 1000000.0;
   double rate = msgCounter.toDouble() / totalSecs;
   NumberFormat f3digits = NumberFormat('###,###.00#');

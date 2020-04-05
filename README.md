@@ -21,17 +21,18 @@ Build main if not already built then run it
 $ make run
 bin/main
 Press any key to stop:
-client: done
-RECEIVE: responsePort
-Total time=4.398 secs msgs=990,734 rate=225,275 msgs/sec
+client: running
+server: running
+MyServer: got partnerPort
 stopping
 stopped
+Total time=13.376 secs msgs=19,882,440 rate=1,486,437 msgs/sec
 ```
 
 ## Clean
 ```
 $ make clean
-rm -f main
+rm -f bin/main
 ```
 
 You can compbine them too
@@ -39,13 +40,13 @@ You can compbine them too
 $ make clean run
 rm -f bin/main
 dart2native lib/main.dart -o bin/main
-Generated: /home/wink/prgs/dart/isolate-example/bin/main
+Generated: /home/wink/prgs/dart/isolate-example2/bin/main
 bin/main
 Press any key to stop:
-client: done
-RECEIVE: responsePort
-Total time=2.693 secs msgs=585,980 rate=217,592 msgs/sec
+client: running
+server: running
+MyServer: got partnerPort
 stopping
 stopped
-
+Total time=8.892 secs msgs=13,326,641 rate=1,498,738 msgs/sec
 ```
