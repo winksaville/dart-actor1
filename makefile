@@ -4,6 +4,10 @@ bin/main: lib/main.dart
 run: bin/main
 	$<
 
+.PHONY: analyze
+analyze:
+	dartanalyzer lib/main.dart
+
 .PHONY: vm
 vm:
 	dart lib/main.dart
