@@ -8,6 +8,7 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:isolate';
 //import 'package:intl/intl.dart';
+import 'package:args/args.dart';
 
 /// Commands actors support
 /// A message is a Map with a key of ActorCmd whose
@@ -38,9 +39,11 @@ abstract class ActorBase {
   /// back to the master.
   void start({bool local=false}) async {
     if (local) {
+      stdout.writeln('${name}: local');
       isolate = Isolate.current;
       _entryPoint(this);
     } else {
+      stdout.writeln('${name}: isolate');
       isolate = await Isolate.spawn<ActorBase>(ActorBase._entryPoint, this);
     }
   }
@@ -165,8 +168,25 @@ class MyActor extends ActorBase {
   }
 }
 
+ArgResults parseArgs(List<String> args) {
+  ArgParser parser = ArgParser();
+  parser.addOption('actor1', abbr: '1', allowed: ['local', 'isolate'],
+    defaultsTo: 'isolate');
+  parser.addOption('actor2', abbr: '2', allowed: ['local', 'isolate'],
+    defaultsTo: 'isolate');
+  parser.addFlag('help', abbr: 'h', negatable: false);
+
+  ArgResults argResults = parser.parse(args);
+  if (argResults['help']) {
+    stdout.writeln(parser.usage);
+    exit(0);
+  }
+  return argResults;
+}
 
 void main(List<String> args) async {
+  ArgResults argResults = parseArgs(args);
+
   // Change stdin so it doesn't echo input and doesn't wait for enter key
   stdin.echoMode = false;
   stdin.lineMode = false;
@@ -179,7 +199,8 @@ void main(List<String> args) async {
 
   //int beforeStart = stopwatch.elapsedMicroseconds;
 
-  // Create actor1
+  // Create actor1. There is probably a better way to
+  // wait for an actor to start but this works for now.
   StreamController<bool> actor1Running = StreamController<bool>();
 
   ReceivePort actor1MasterReceivePort = ReceivePort();
@@ -206,15 +227,15 @@ void main(List<String> args) async {
     }
   });
 
-  // We need to wait because actor2 assume actor1 has already started.
+  // We need to wait because actor2 assumes actor1 has already started.
   // There should probably be a central actor manager which would allow
   // one actor to wait for a specific set of actors to be running.
-  print('Wait for stream event');
+  stdout.writeln('Wait for stream event');
   await for (var value in actor1Running.stream) {
-    print('got value=${value}');
+    stdout.writeln('got value=${value}');
     actor1Running.close();
   }
-  print('actor1 is running');
+  stdout.writeln('actor1 is running');
 
   // Create actor2
   ReceivePort actor2MasterReceivePort = ReceivePort();
