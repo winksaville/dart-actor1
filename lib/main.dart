@@ -5,7 +5,7 @@
 // can communicate directly with them selves.
 
 import 'dart:io';
-//import 'dart:async';
+import 'dart:async';
 import 'dart:isolate';
 //import 'package:intl/intl.dart';
 
@@ -36,8 +36,8 @@ abstract class ActorBase {
   /// Start the actor. When the actor starts _enter will
   /// it will create a ReceivePort and send the SendPort
   /// back to the master.
-  void start({bool locally=false}) async {
-    if (locally) {
+  void start({bool local=false}) async {
+    if (local) {
       isolate = Isolate.current;
       _entryPoint(this);
     } else {
@@ -59,6 +59,9 @@ abstract class ActorBase {
     actor._enter();
     actor._begin();
     actor._listen();
+    assert(actor._fromMasterReceivePort != null);
+    stdout.writeln('${actor.name}: sending ActorCmd.connected');
+    actor._toMasterSendPort.send({ActorCmd: ActorCmd.connected});
     stdout.writeln('${actor.name}.entryPoint:-');
   }
 
@@ -163,7 +166,7 @@ class MyActor extends ActorBase {
 }
 
 
-void main() async {
+void main(List<String> args) async {
   // Change stdin so it doesn't echo input and doesn't wait for enter key
   stdin.echoMode = false;
   stdin.lineMode = false;
@@ -177,9 +180,11 @@ void main() async {
   //int beforeStart = stopwatch.elapsedMicroseconds;
 
   // Create actor1
+  StreamController<bool> actor1Running = StreamController<bool>();
+
   ReceivePort actor1MasterReceivePort = ReceivePort();
   MyActor actor1 = MyActor('actor1', actor1MasterReceivePort.sendPort);
-  await actor1.start(locally: false);
+  await actor1.start(local: argResults['actor1'] == 'local');
   SendPort actor1ToActorSendPort = null;
   actor1MasterReceivePort.listen((msg) {
     switch (msg[ActorCmd]) {
@@ -189,18 +194,32 @@ void main() async {
         actor1ToActorSendPort = msg[ActorCmd.data];
         actor1ToActorSendPort.send({
           ActorCmd: ActorCmd.data,
-          ActorCmd.data: "Yo Dude",
+          ActorCmd.data: "Yo true",
         });
+        break;
+      case ActorCmd.connected:
+        stdout.writeln('actor1MasterReceivePort: connected msg=${msg}');
+        actor1Running.add(true);
         break;
       default:
         stdout.writeln('actor1MasterReceivePort: unsupported msg=${msg}');
     }
   });
 
+  // We need to wait because actor2 assume actor1 has already started.
+  // There should probably be a central actor manager which would allow
+  // one actor to wait for a specific set of actors to be running.
+  print('Wait for stream event');
+  await for (var value in actor1Running.stream) {
+    print('got value=${value}');
+    actor1Running.close();
+  }
+  print('actor1 is running');
+
   // Create actor2
   ReceivePort actor2MasterReceivePort = ReceivePort();
   MyActor actor2 = MyActor('actor2', actor2MasterReceivePort.sendPort);
-  await actor2.start(locally: true);
+  await actor2.start(local: argResults['actor2'] == 'local');
   SendPort actor2ToActorSendPort = null;
   actor2MasterReceivePort.listen((msg) {
     switch (msg[ActorCmd]) {

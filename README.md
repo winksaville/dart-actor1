@@ -1,7 +1,6 @@
-# Simple isolate example in dart
+# My first attempt at an Actor for dart
 
-Based on [this](https://codingwithjoe.com/dart-fundamentals-isolates/) from
-[Coding With Joe](codingwithjost.com).
+Based on [my initial isolate exploration](https://github.com/winksaville/dart-isolate-example.git).
 
 Right now on my desktop I'm seeing about 225,000 msgs/sec, the client is
 sending the integer counter the two isolates.
