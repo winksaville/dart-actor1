@@ -39,11 +39,11 @@ abstract class ActorBase {
   /// back to the master.
   void start({bool local=false}) async {
     if (local) {
-      stdout.writeln('${name}: local');
+      print('${name}: local');
       isolate = Isolate.current;
       _entryPoint(this);
     } else {
-      stdout.writeln('${name}: isolate');
+      print('${name}: isolate');
       isolate = await Isolate.spawn<ActorBase>(ActorBase._entryPoint, this);
     }
   }
@@ -58,14 +58,14 @@ abstract class ActorBase {
 
   /// Invoked by when the actor starts.
   static void _entryPoint(ActorBase actor) {
-    stdout.writeln('${actor.name}.entryPoint:+');
+    print('${actor.name}.entryPoint:+');
     actor._enter();
     actor._begin();
     actor._listen();
     assert(actor._fromMasterReceivePort != null);
-    stdout.writeln('${actor.name}: sending ActorCmd.connected');
+    print('${actor.name}: sending ActorCmd.connected');
     actor._toMasterSendPort.send({ActorCmd: ActorCmd.connected});
-    stdout.writeln('${actor.name}.entryPoint:-');
+    print('${actor.name}.entryPoint:-');
   }
 
   /// Called once when Actor is first invoked and usually
@@ -107,13 +107,13 @@ class MyActor extends ActorBase {
   void _process(dynamic msg) {
     switch (msg[ActorCmd]) {
       case ActorCmd.sendPort:
-        stdout.writeln('${name}._process: sendPort data=${msg[ActorCmd.data]}');
+        print('${name}._process: sendPort data=${msg[ActorCmd.data]}');
         break;
       case ActorCmd.connectToPeer:
         // Master asking us to connect to a peer
         if (_peerSendPort == null) {
           assert(msg[ActorCmd.data] is SendPort);
-          stdout.writeln('${name}._process: connectToPeer data=${msg[ActorCmd.data]}');
+          print('${name}._process: connectToPeer data=${msg[ActorCmd.data]}');
           _peerSendPort = msg[ActorCmd.data];
 
           // Send the peer ReceivePort.sendPort so the peer can send to us
@@ -125,7 +125,7 @@ class MyActor extends ActorBase {
 
           _peerReceivePort.listen(_process);
         } else {
-          stdout.writeln('${name}._process: Already connected');
+          print('${name}._process: Already connected');
           _peerSendPort.send({
             ActorCmd: ActorCmd.data,
             ActorCmd.data: '${name} We are connected',
@@ -136,7 +136,7 @@ class MyActor extends ActorBase {
         // Peer asking us to connect to them
         if (_peerSendPort == null) {
           assert(msg[ActorCmd.data] is SendPort);
-          stdout.writeln('${name}._process: connectFromPeer data=${msg[ActorCmd.data]}');
+          print('${name}._process: connectFromPeer data=${msg[ActorCmd.data]}');
           _peerSendPort = msg[ActorCmd.data];
 
           // Send the peer ReceivePort.sendPort via ActorCmd.connected
@@ -148,7 +148,7 @@ class MyActor extends ActorBase {
           });
           _peerReceivePort.listen(_process);
         } else {
-          stdout.writeln('${name}._process: Already connected');
+          print('${name}._process: Already connected');
           _peerSendPort.send({
             ActorCmd: ActorCmd.error,
             ActorCmd.data: 'Already conected',
@@ -156,13 +156,13 @@ class MyActor extends ActorBase {
         }
         break;
       case ActorCmd.connected:
-        stdout.writeln('${name}._process: connected msg=${msg}');
+        print('${name}._process: connected msg=${msg}');
         assert(_peerSendPort != null);
         assert(msg[ActorCmd.data] is SendPort);
         _peerSendPort = msg[ActorCmd.data]; // Use latest SendPort?
         break;
       case ActorCmd.data:
-        stdout.writeln('${name}._process: data data=${msg[ActorCmd.data]}');
+        print('${name}._process: data data=${msg[ActorCmd.data]}');
         break;
     }
   }
@@ -178,7 +178,7 @@ ArgResults parseArgs(List<String> args) {
 
   ArgResults argResults = parser.parse(args);
   if (argResults['help']) {
-    stdout.writeln(parser.usage);
+    print(parser.usage);
     exit(0);
   }
   return argResults;
@@ -187,15 +187,11 @@ ArgResults parseArgs(List<String> args) {
 void main(List<String> args) async {
   ArgResults argResults = parseArgs(args);
 
-  // Change stdin so it doesn't echo input and doesn't wait for enter key
-  stdin.echoMode = false;
-  stdin.lineMode = false;
-
   Stopwatch stopwatch = Stopwatch();
   stopwatch.start();
 
   // Tell the user to press a key
-  stdout.writeln('Press any key to stop:');
+  print('Press any key to stop:');
 
   //int beforeStart = stopwatch.elapsedMicroseconds;
 
@@ -210,7 +206,7 @@ void main(List<String> args) async {
   actor1MasterReceivePort.listen((msg) {
     switch (msg[ActorCmd]) {
       case ActorCmd.sendPort:
-        stdout.writeln('actor1MasterReceivePort: got ActorCmd.sendPort');
+        print('actor1MasterReceivePort: got ActorCmd.sendPort');
         assert(msg[ActorCmd.data] is SendPort);
         actor1ToActorSendPort = msg[ActorCmd.data];
         actor1ToActorSendPort.send({
@@ -219,23 +215,23 @@ void main(List<String> args) async {
         });
         break;
       case ActorCmd.connected:
-        stdout.writeln('actor1MasterReceivePort: connected msg=${msg}');
+        print('actor1MasterReceivePort: connected msg=${msg}');
         actor1Running.add(true);
         break;
       default:
-        stdout.writeln('actor1MasterReceivePort: unsupported msg=${msg}');
+        print('actor1MasterReceivePort: unsupported msg=${msg}');
     }
   });
 
   // We need to wait because actor2 assumes actor1 has already started.
   // There should probably be a central actor manager which would allow
   // one actor to wait for a specific set of actors to be running.
-  stdout.writeln('Wait for stream event');
+  print('Wait for stream event');
   await for (var value in actor1Running.stream) {
-    stdout.writeln('got value=${value}');
+    print('got value=${value}');
     actor1Running.close();
   }
-  stdout.writeln('actor1 is running');
+  print('actor1 is running');
 
   // Create actor2
   ReceivePort actor2MasterReceivePort = ReceivePort();
@@ -245,7 +241,7 @@ void main(List<String> args) async {
   actor2MasterReceivePort.listen((msg) {
     switch (msg[ActorCmd]) {
       case ActorCmd.sendPort:
-        stdout.writeln('actor2MasterReceivePort: got ActorCmd.sendPort');
+        print('actor2MasterReceivePort: got ActorCmd.sendPort');
         assert(msg[ActorCmd.data] is SendPort);
         actor2ToActorSendPort = msg[ActorCmd.data];
         actor2ToActorSendPort.send({
@@ -260,20 +256,21 @@ void main(List<String> args) async {
         });
         break;
       default:
-        stdout.writeln('actor2MasterReceivePort: unsupported msg=${msg}');
+        print('actor2MasterReceivePort: unsupported msg=${msg}');
     }
   });
 
-  //// Wait for any key
-  //int afterStart = stopwatch.elapsedMicroseconds;
+  // Wait for any key
+  stdin.echoMode = false;
+  stdin.lineMode = false;
   await stdin.first;
   //int done = stopwatch.elapsedMicroseconds;
 
   //// Stop the client
-  //stdout.writeln('stopping');
+  //print('stopping');
   //result.client.stop();
   //result.server.stop();
-  //stdout.writeln('stopped');
+  //print('stopped');
 
   //// Print time
   //int msgCounter = result.client.counter + result.server.counter;
@@ -281,7 +278,7 @@ void main(List<String> args) async {
   //double rate = msgCounter.toDouble() / totalSecs;
   //NumberFormat f3digits = NumberFormat('###,###.00#');
   //NumberFormat f0digit = NumberFormat('###,###');
-  //stdout.writeln(
+  //print(
   //  'Total time=${f3digits.format(totalSecs)} secs '
   //  'msgs=${f0digit.format(msgCounter)} '
   //  'rate=${f0digit.format(rate)} msgs/sec');
