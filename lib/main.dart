@@ -58,14 +58,12 @@ abstract class ActorBase {
 
   /// Invoked by when the actor starts.
   static void _entryPoint(ActorBase actor) {
-    print('${actor.name}.entryPoint:+');
     actor._enter();
     actor._begin();
     actor._listen();
     assert(actor._fromMasterReceivePort != null);
-    print('${actor.name}: sending ActorCmd.connected');
+    //print('${actor.name}: sending ActorCmd.connected');
     actor._toMasterSendPort.send({ActorCmd: ActorCmd.connected});
-    print('${actor.name}.entryPoint:-');
   }
 
   /// Called once when Actor is first invoked and usually
@@ -190,9 +188,6 @@ void main(List<String> args) async {
   Stopwatch stopwatch = Stopwatch();
   stopwatch.start();
 
-  // Tell the user to press a key
-  print('Press any key to stop:');
-
   //int beforeStart = stopwatch.elapsedMicroseconds;
 
   // Create actor1. There is probably a better way to
@@ -209,10 +204,6 @@ void main(List<String> args) async {
         print('actor1MasterReceivePort: got ActorCmd.sendPort');
         assert(msg[ActorCmd.data] is SendPort);
         actor1ToActorSendPort = msg[ActorCmd.data];
-        actor1ToActorSendPort.send({
-          ActorCmd: ActorCmd.data,
-          ActorCmd.data: "Yo true",
-        });
         break;
       case ActorCmd.connected:
         print('actor1MasterReceivePort: connected msg=${msg}');
@@ -226,9 +217,8 @@ void main(List<String> args) async {
   // We need to wait because actor2 assumes actor1 has already started.
   // There should probably be a central actor manager which would allow
   // one actor to wait for a specific set of actors to be running.
-  print('Wait for stream event');
   await for (var value in actor1Running.stream) {
-    print('got value=${value}');
+    print('actor1Running: value=${value}');
     actor1Running.close();
   }
   print('actor1 is running');
@@ -244,10 +234,6 @@ void main(List<String> args) async {
         print('actor2MasterReceivePort: got ActorCmd.sendPort');
         assert(msg[ActorCmd.data] is SendPort);
         actor2ToActorSendPort = msg[ActorCmd.data];
-        actor2ToActorSendPort.send({
-          ActorCmd: ActorCmd.data,
-          ActorCmd.data: "Yo Bro",
-        });
 
         // Ask actor2 to connect to actor1
         actor2ToActorSendPort.send({
@@ -260,7 +246,8 @@ void main(List<String> args) async {
     }
   });
 
-  // Wait for any key
+  // Tell the user to press a key
+  print('Press any key to stop:');
   stdin.echoMode = false;
   stdin.lineMode = false;
   await stdin.first;
