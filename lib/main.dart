@@ -13,9 +13,12 @@ import 'dart:isolate';
 /// A message is a Map with a key of ActorCmd whose
 /// name is one of the following enumerations
 enum ActorCmd {
-  sendPort,  /// ActorCmd.data is the SendPort
-  data,      /// ActorCmd.data is some data
-  connect,   /// ActorCmd.data is TBD
+  sendPort,                   /// ActorCmd.data is the SendPort
+  data,                       /// ActorCmd.data is some data
+  connectToPeer,              /// ActorCmd.data is SendPort
+  connectFromPeer,            /// ActorCmd.data is SendPort
+  connected,                  /// ActorCmd.data empty
+  error,                      /// ActorCmd.data error info as string for now
 }
 
 /// Actor that can process messages
@@ -85,7 +88,8 @@ abstract class ActorBase {
 }
 
 class MyActor extends ActorBase {
-  int counter = 0;
+  SendPort _peerSendPort;
+  ReceivePort _peerReceivePort;
 
   MyActor(String name, SendPort masterPort) : super(name, masterPort);
 
@@ -99,8 +103,57 @@ class MyActor extends ActorBase {
       case ActorCmd.sendPort:
         stdout.writeln('${name}._process: sendPort data=${msg[ActorCmd.data]}');
         break;
-      case ActorCmd.connect:
-        stdout.writeln('${name}._process: connect data=${msg[ActorCmd.data]}');
+      case ActorCmd.connectToPeer:
+        // Master asking us to connect to a peer
+        if (_peerSendPort == null) {
+          assert(msg[ActorCmd.data] is SendPort);
+          stdout.writeln('${name}._process: connectToPeer data=${msg[ActorCmd.data]}');
+          _peerSendPort = msg[ActorCmd.data];
+
+          // Send the peer ReceivePort.sendPort so the peer can send to us
+          _peerReceivePort = ReceivePort();
+          _peerSendPort.send({
+            ActorCmd: ActorCmd.connectFromPeer,
+            ActorCmd.data: _peerReceivePort.sendPort,
+          });
+
+          _peerReceivePort.listen(_process);
+        } else {
+          stdout.writeln('${name}._process: Already connected');
+          _peerSendPort.send({
+            ActorCmd: ActorCmd.data,
+            ActorCmd.data: '${name} We are connected',
+          });
+        }
+        break;
+      case ActorCmd.connectFromPeer:
+        // Peer asking us to connect to them
+        if (_peerSendPort == null) {
+          assert(msg[ActorCmd.data] is SendPort);
+          stdout.writeln('${name}._process: connectFromPeer data=${msg[ActorCmd.data]}');
+          _peerSendPort = msg[ActorCmd.data];
+
+          // Send the peer ReceivePort.sendPort via ActorCmd.connected
+          // TODO add our name and/or a GUID?
+          _peerReceivePort = ReceivePort();
+          _peerSendPort.send({
+            ActorCmd: ActorCmd.connected,
+            ActorCmd.data: _peerReceivePort.sendPort,
+          });
+          _peerReceivePort.listen(_process);
+        } else {
+          stdout.writeln('${name}._process: Already connected');
+          _peerSendPort.send({
+            ActorCmd: ActorCmd.error,
+            ActorCmd.data: 'Already conected',
+          });
+        }
+        break;
+      case ActorCmd.connected:
+        stdout.writeln('${name}._process: connected msg=${msg}');
+        assert(_peerSendPort != null);
+        assert(msg[ActorCmd.data] is SendPort);
+        _peerSendPort = msg[ActorCmd.data]; // Use latest SendPort?
         break;
       case ActorCmd.data:
         stdout.writeln('${name}._process: data data=${msg[ActorCmd.data]}');
@@ -139,21 +192,15 @@ void main() async {
           ActorCmd.data: "Yo Dude",
         });
         break;
-      case ActorCmd.connect:
-        stdout.writeln('actor1MasterReceivePort: connect msg=${msg}');
-        break;
-      case ActorCmd.data:
-        stdout.writeln('actor1MasterReceivePort: data msg=${msg}');
-        break;
       default:
-        stdout.writeln('actor1MasterReceivePort: unknown msg=${msg}');
+        stdout.writeln('actor1MasterReceivePort: unsupported msg=${msg}');
     }
   });
 
   // Create actor2
   ReceivePort actor2MasterReceivePort = ReceivePort();
   MyActor actor2 = MyActor('actor2', actor2MasterReceivePort.sendPort);
-  await actor2.start(locally: false);
+  await actor2.start(locally: true);
   SendPort actor2ToActorSendPort = null;
   actor2MasterReceivePort.listen((msg) {
     switch (msg[ActorCmd]) {
@@ -168,18 +215,12 @@ void main() async {
 
         // Ask actor2 to connect to actor1
         actor2ToActorSendPort.send({
-          ActorCmd: ActorCmd.connect,
+          ActorCmd: ActorCmd.connectToPeer,
           ActorCmd.data: actor1ToActorSendPort,
         });
         break;
-      case ActorCmd.connect:
-        stdout.writeln('actor2MasterReceivePort: connect msg=${msg}');
-        break;
-      case ActorCmd.data:
-        stdout.writeln('actor2MasterReceivePort: data msg=${msg}');
-        break;
       default:
-        stdout.writeln('actor2MasterReceivePort: unknown msg=${msg}');
+        stdout.writeln('actor2MasterReceivePort: unsupported msg=${msg}');
     }
   });
 
