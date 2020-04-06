@@ -165,6 +165,12 @@ void main() async {
           ActorCmd: ActorCmd.data,
           ActorCmd.data: "Yo Bro",
         });
+
+        // Ask actor2 to connect to actor1
+        actor2ToActorSendPort.send({
+          ActorCmd: ActorCmd.connect,
+          ActorCmd.data: actor1ToActorSendPort,
+        });
         break;
       case ActorCmd.connect:
         stdout.writeln('actor2MasterReceivePort: connect msg=${msg}');
