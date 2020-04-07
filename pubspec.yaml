@@ -1,4 +1,4 @@
-name: isolate_exmaple
+name: actor1
 dependencies:
   intl: ^0.16.0
   args: ^1.6.0
