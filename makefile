@@ -10,7 +10,7 @@ analyze:
 
 .PHONY: vm
 vm:
-	dart lib/main.dart
+	dart --enable-asserts lib/main.dart
 
 .PHONY: clean
 clean:

@@ -7,6 +7,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:isolate';
+import 'package:async/async.dart';
 import 'package:intl/intl.dart';
 import 'package:args/args.dart';
 
@@ -104,10 +105,6 @@ class MyActor extends ActorBase {
   bool echoing = false;
 
   MyActor(String name, SendPort masterPort) : super(name, masterPort);
-
-  @override
-  void _begin() {
-  }
 
   @override
   void _process(dynamic msg) {
@@ -238,21 +235,23 @@ ArgResults parseArgs(List<String> args) {
   return argResults;
 }
 
+void delay(Duration duration) async {
+  print('delaying...');
+  await Future.delayed(duration);
+  print('continuing...');
+}
+
 void main(List<String> args) async {
   ArgResults argResults = parseArgs(args);
 
   Stopwatch stopwatch = Stopwatch();
   stopwatch.start();
 
-  // Create actor1. There is probably a better way to
-  // wait for an actor to start but this works for now.
-  //StreamController<bool> actor1Running = StreamController<bool>();
-  StreamController<int> actor1Running = StreamController<int>.broadcast(
-    onListen: () {
-      print('actor1: onListen');
-    },
-  );
+  // Create actor1 and a StreamQueue for reading
+  // the responses from the actor.
 
+  StreamController<int> actor1Stream = StreamController<int>();
+  StreamQueue<int> actor1Queue = StreamQueue<int>(actor1Stream.stream);
 
   ReceivePort actor1MasterReceivePort = ReceivePort();
   MyActor actor1 = MyActor('actor1', actor1MasterReceivePort.sendPort);
@@ -267,11 +266,11 @@ void main(List<String> args) async {
         break;
       case ActorCmd.connected:
         print('actor1MasterReceivePort: connected msg=${msg}');
-        actor1Running.add(1);
+        actor1Stream.add(1);
         break;
       case ActorCmd.stopEchoResult:
         print('actor1MasterReceivePort: stopEchoResult msg=${msg}');
-        actor1Running.add(msg[ActorCmd.data]);
+        actor1Stream.add(msg[ActorCmd.data]);
         break;
       default:
         print('actor1MasterReceivePort: unsupported msg=${msg}');
@@ -281,23 +280,16 @@ void main(List<String> args) async {
   // We need to wait because actor2 assumes actor1 has already started.
   // There should probably be a central actor manager which would allow
   // one actor to wait for a specific set of actors to be running.
-  //print('actor1 waiting for running');
-  //await for (int value in actor1Running.stream) {
-  //  print('actor1Running: value=${value}');
-  //  //actor1Running.close();
-  //}
-  print('actor1Running.stream.first');
-  int v1 = await actor1Running.stream.first;
-  print('actor1 is running v1=${v1}');
+  print('actor1Queue.next');
+  int a1 = await actor1Queue.next;
+  print('actor1Queue.next a1=${a1}');
+  assert(a1 == 1);
 
-  // Create actor2
-  //StreamController<int> actor2Running = StreamController<int>();
-  
-  StreamController<int> actor2Running = StreamController<int>.broadcast(
-    onListen: () {
-      print('actor2: onListen');
-    },
-  );
+  // Create actor2 and a StreamQueue for reading
+  // the responses from the actor.
+
+  StreamController<int> actor2Stream = StreamController<int>();
+  StreamQueue<int> actor2Queue = StreamQueue<int>(actor2Stream.stream);
 
   ReceivePort actor2MasterReceivePort = ReceivePort();
   MyActor actor2 = MyActor('actor2', actor2MasterReceivePort.sendPort);
@@ -318,39 +310,30 @@ void main(List<String> args) async {
         break;
       case ActorCmd.connected:
         print('actor1MasterReceivePort: connected msg=${msg}');
-        actor2Running.add(1);
+        actor2Stream.add(1);
         break;
       case ActorCmd.connectedToPeer:
         print('actor2MasterReceivePort: connectedToPeer msg=${msg}');
-        actor2Running.add(2);
+        actor2Stream.add(2);
         break;
       case ActorCmd.stopEchoResult:
         print('actor2MasterReceivePort: stopEchoResult msg=${msg}');
-        actor2Running.add(msg[ActorCmd.data]);
+        actor2Stream.add(msg[ActorCmd.data]);
         break;
       default:
         print('actor2MasterReceivePort: unsupported msg=${msg}');
     }
   });
 
-  print('actor2 waiting for running isBroadcast=${actor2Running.stream.isBroadcast}');
-
-  //int expectValue = 1;
-  //await for (int value in actor2Running.stream) {
-  //  print('actor2Running: value=${value}');
-  //  assert (value == expectValue);
-  //  expectValue += 1;
-  //  if (value == 2) {
-  //    actor2Running.close();
-  //  }
-  //}
   print('actor2 wait for connected');
-  int a2 = await actor2Running.stream.first;
-  print('a2=${a2}');
-  print('actor2 wait for connectedToPeer');
-  a2 = await actor2Running.stream.first;
-  print('a2=${a2}');
+  int a2_1 = await actor2Queue.next;
+  print('actor2 a2_1=${a2_1}');
+  assert(a2_1 == 1);
 
+  print('actor2 wait for connectedToPeer');
+  int a2_2 = await actor2Queue.next;
+  print('actor2 a2_2=${a2_2}');
+  assert(a2_2 == 2);
 
   int beforeStart = stopwatch.elapsedMicroseconds;
 
@@ -372,26 +355,14 @@ void main(List<String> args) async {
   actor2ToActorSendPort.send({ActorCmd: ActorCmd.stopEcho});
   
   print('actor1 reading echoCounter');
-  actor1.echoCounter = await actor1Running.stream.first;
+  actor1.echoCounter = await actor1Queue.next;
   print('actor1.echoCounter=${actor1.echoCounter}');
 
   print('actor2 reading echoCounter');
-  actor2.echoCounter = await actor2Running.stream.first;
+  actor2.echoCounter = await actor2Queue.next;
   print('actor2.echoCounter=${actor2.echoCounter}');
 
-  ////await for (int value in actor1Running.stream) {
-  ////  print('actor1Running: value=${value}');
-  ////  actor1Running.close();
-  ////}
-  //await for (int value in actor2Running.stream) {
-  //  print('actor2Running: value=${value}');
-  //  actor1Running.close();
-  //}
-
-  // Delay
-  print('delaying...');
-  await Future.delayed(const Duration(seconds : 3));
-  print('continuing...');
+  //await delay(Duration(microseconds: 1000));
 
   // Stop the client
   print('stopping');
