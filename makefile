@@ -1,5 +1,5 @@
-bin/main: bin/main.dart
-	dart2native $< -o $@
+bin/main: bin/main.dart lib/actor1.dart
+	dart2native bin/main.dart -o $@
 
 run: bin/main
 	$<
