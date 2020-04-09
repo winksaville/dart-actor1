@@ -101,8 +101,10 @@ class MyActor extends ActorBase {
   SendPort _peerSendPort;
   ReceivePort _peerReceivePort;
 
-  int echoCounter = 0;
+  int echoCounter;
   bool echoing = false;
+  List<int> timestamps = List<int>(1000000);
+
 
   @override
   void _process(dynamic msg) {
@@ -128,6 +130,7 @@ class MyActor extends ActorBase {
           _peerReceivePort.listen(_process);
           print('$name._process:- connectToPeer _peerSendPort == null');
         } else {
+          // TODO(wink): Someday support multiple connections?
           print('$name._process:+ connectToPeer _peerSendPort != null Already connected');
           _peerSendPort.send(<ActorCmd, dynamic> {
             ActorCmd.op: ActorCmd.data,
@@ -184,18 +187,25 @@ class MyActor extends ActorBase {
       case ActorCmd.startEcho:
         print('$name._process: startEcho $msg');
         echoing = true;
+        echoCounter = 0;
         continue echoLabel;
       echoLabel:
       case ActorCmd.echo:
         if (echoing) {
-          //print('$name._process: echo $msg');
-          // For now we'll play endless ping pong with our peer passing
-          // the msg[ActorCmd.data] back and forth.
           assert(_peerSendPort != null);
+
+          final int now = DateTime.now().microsecondsSinceEpoch;
+          final int sent = msg[ActorCmd.data] as int;
+          final int duration = now - sent;
+          timestamps[echoCounter % timestamps.length] = duration;
+          //if (echoCounter % 1000 == 0) {
+          //  print('$name $echoCounter:ts=$duration');
+          //}
           echoCounter += 1;
+
           _peerSendPort.send(<ActorCmd, dynamic>{
             ActorCmd.op: ActorCmd.echo,
-            ActorCmd.data: msg[ActorCmd.data],
+            ActorCmd.data: now,
           });
         }
         break;

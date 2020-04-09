@@ -125,8 +125,12 @@ Future<void> main(List<String> args) async {
 
   // Start the echo test
   print('Starting echo test');
-  actor1ToActorSendPort.send(<ActorCmd, dynamic>{ActorCmd.op: ActorCmd.startEcho, ActorCmd.data: 1});
-  actor2ToActorSendPort.send(<ActorCmd, dynamic>{ActorCmd.op: ActorCmd.startEcho, ActorCmd.data: 2});
+  final Map<ActorCmd, dynamic> msg = <ActorCmd, dynamic>{};
+  msg[ActorCmd.op] = ActorCmd.startEcho;
+  msg[ActorCmd.data] = DateTime.now().microsecondsSinceEpoch;
+  actor1ToActorSendPort.send(msg);
+  msg[ActorCmd.data] = DateTime.now().microsecondsSinceEpoch;
+  actor2ToActorSendPort.send(msg);
 
   // Tell the user what to do to stop
   try {
