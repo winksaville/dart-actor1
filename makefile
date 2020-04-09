@@ -6,7 +6,7 @@ run: bin/main
 
 .PHONY: analyze
 analyze:
-	dartanalyzer bin/main.dart
+	dartanalyzer bin/main.dart lib/actor1.dart
 
 .PHONY: vm
 vm:
