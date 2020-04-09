@@ -5,6 +5,7 @@
 // can communicate directly with them selves.
 
 import 'dart:isolate';
+import 'dart:math';
 
 /// Commands actors support
 /// A message is a Map with a key of ActorCmd whose
@@ -21,7 +22,9 @@ enum ActorCmd {
   startEcho,                  /// ActorCmd.data data
   echo,                       /// ActorCmd.data data
   stopEcho,                   /// ActorCmd.data empty
-  stopEchoResult,             /// ActorCmd.data echoCounter
+  stopEchoResult,             /// ActorCmd.data counter
+  getTimestamps,              /// ActorCmd.data timestamps
+  getTimestampsResult,        /// ActorCmd.data TimestampsResult
 }
 
 /// Actor that can process messages
@@ -95,16 +98,31 @@ abstract class ActorBase {
   void _process(dynamic msg);
 }
 
+int numberOfOneBits(int value) {
+  int count = 0;
+  int mask = 1;
+  for (int i = 0; i < 64; i++) {
+    count += ((mask & value) == 0) ? 0 : 1;
+    mask <<= 2;
+  }
+  return count;
+}
+
+class TimeStamps {
+  int counter;
+  List<int> list = List<int>(pow(2, 18).toInt());
+}
+
 class MyActor extends ActorBase {
-  MyActor(String name, SendPort masterPort) : super(name, masterPort);
+  MyActor(String name, SendPort masterPort) : super(name, masterPort) {
+    assert(numberOfOneBits(timestamps.list.length) == 1);
+  }
 
   SendPort _peerSendPort;
   ReceivePort _peerReceivePort;
 
-  int echoCounter;
   bool echoing = false;
-  List<int> timestamps = List<int>(1000000);
-
+  TimeStamps timestamps = TimeStamps();
 
   @override
   void _process(dynamic msg) {
@@ -187,7 +205,7 @@ class MyActor extends ActorBase {
       case ActorCmd.startEcho:
         print('$name._process: startEcho $msg');
         echoing = true;
-        echoCounter = 0;
+        timestamps.counter = 0;
         continue echoLabel;
       echoLabel:
       case ActorCmd.echo:
@@ -195,13 +213,9 @@ class MyActor extends ActorBase {
           assert(_peerSendPort != null);
 
           final int now = DateTime.now().microsecondsSinceEpoch;
-          final int sent = msg[ActorCmd.data] as int;
-          final int duration = now - sent;
-          timestamps[echoCounter % timestamps.length] = duration;
-          //if (echoCounter % 1000 == 0) {
-          //  print('$name $echoCounter:ts=$duration');
-          //}
-          echoCounter += 1;
+          timestamps.list[timestamps.counter & (timestamps.list.length - 1)] =
+              now;
+          timestamps.counter += 1;
 
           _peerSendPort.send(<ActorCmd, dynamic>{
             ActorCmd.op: ActorCmd.echo,
@@ -219,8 +233,16 @@ class MyActor extends ActorBase {
         echoing = false;
         _toMasterSendPort.send(<ActorCmd, dynamic>{
           ActorCmd.op: ActorCmd.stopEchoResult,
-          ActorCmd.data: echoCounter,
+          ActorCmd.data: timestamps.counter,
         });
+        break;
+      case ActorCmd.getTimestamps:
+        print('$name:+ ActorCmd.getTimestamps');
+        _toMasterSendPort.send(<ActorCmd, dynamic>{
+          ActorCmd.op: ActorCmd.getTimestampsResult,
+          ActorCmd.data: timestamps,
+        });
+        print('$name:- ActorCmd.getTimestamps');
         break;
       default:
         print('$name._process: Unknown ActorCmd ${msg[ActorCmd]}');
